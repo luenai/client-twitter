@@ -561,7 +561,7 @@ import {
   ActionTimelineType as ActionTimelineType2
 } from "@elizaos/core";
 
-// ../../node_modules/zod/lib/index.mjs
+// node_modules/.pnpm/zod@3.24.2/node_modules/zod/lib/index.mjs
 var util;
 (function(util2) {
   util2.assertEqual = (val) => val;
@@ -4382,16 +4382,32 @@ ZodReadonly.create = (type, params) => {
     ...processCreateParams(params)
   });
 };
-function custom(check, params = {}, fatal) {
+function cleanParams(params, data) {
+  const p = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
+  const p2 = typeof p === "string" ? { message: p } : p;
+  return p2;
+}
+function custom(check, _params = {}, fatal) {
   if (check)
     return ZodAny.create().superRefine((data, ctx) => {
       var _a, _b;
-      if (!check(data)) {
-        const p = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
-        const _fatal = (_b = (_a = p.fatal) !== null && _a !== void 0 ? _a : fatal) !== null && _b !== void 0 ? _b : true;
-        const p2 = typeof p === "string" ? { message: p } : p;
-        ctx.addIssue({ code: "custom", ...p2, fatal: _fatal });
+      const r = check(data);
+      if (r instanceof Promise) {
+        return r.then((r2) => {
+          var _a2, _b2;
+          if (!r2) {
+            const params = cleanParams(_params, data);
+            const _fatal = (_b2 = (_a2 = params.fatal) !== null && _a2 !== void 0 ? _a2 : fatal) !== null && _b2 !== void 0 ? _b2 : true;
+            ctx.addIssue({ code: "custom", ...params, fatal: _fatal });
+          }
+        });
       }
+      if (!r) {
+        const params = cleanParams(_params, data);
+        const _fatal = (_b = (_a = params.fatal) !== null && _a !== void 0 ? _a : fatal) !== null && _b !== void 0 ? _b : true;
+        ctx.addIssue({ code: "custom", ...params, fatal: _fatal });
+      }
+      return;
     });
   return ZodAny.create();
 }
@@ -5140,6 +5156,8 @@ Thread of Tweets You Are Replying To:
 {{actionNames}}
 {{actions}}
 
+Generate a meme to go along with the post, featuring character: {{agentName}}, decide between meme and no meme randoamlly.
+
 Here is the current post text again. Remember to include an action if the current post text includes a prompt that asks for one of the available actions mentioned above (does not need to be exact)
 {{currentPost}}
 Here is the descriptions of images in the Current post.
@@ -5646,10 +5664,26 @@ var twitterPostTemplate = `
 
 {{postDirections}}
 
-# Task: Generate a post in the voice and style and perspective of {{agentName}} @{{twitterUserName}}.
+
+# INSTRUCTIONS: Generate a post in the voice, style and perspective of {{agentName}} (@{{twitterUserName}}).
+You MUST include an action if the current post text includes a prompt that is similar to one of the available actions mentioned here:
+{{actionNames}}
+{{actions}}
+Place the action at the end, seprate by line break.
+
 Write a post that is {{adjective}} about {{topic}} (without mentioning {{topic}} directly), from the perspective of {{agentName}}. Do not add commentary or acknowledge this request, just write the post.
 Your response should be 1, 2, or 3 sentences (choose the length at random).
-Your response should not contain any questions. Brief, concise statements only. The total character count MUST be less than {{maxTweetLength}}. No emojis. Use \\n\\n (double spaces) between statements if there are multiple statements in your response.`;
+Your response should not contain any questions. Brief, concise statements only. The total character count MUST be less than {{maxTweetLength}}.
+No emojis. Use "  " (double spaces) between statements if there are multiple statements in your response.
+
+Generate an image of as character {{agentName}} to go along with the post,  decide between meme and no meme randoamlly.
+
+Respond with json of
+{
+"text": "{tweet content}"
+"action": "{one of the actions that fit}"
+}
+`;
 var twitterActionTemplate = `
 # INSTRUCTIONS: Determine actions for {{agentName}} (@{{twitterUserName}}) based on:
 {{bio}}
@@ -6006,85 +6040,106 @@ var TwitterPostClient = class {
         template: ((_a = this.runtime.character.templates) == null ? void 0 : _a.twitterPostTemplate) || twitterPostTemplate
       });
       elizaLogger4.debug("generate post prompt:\n" + context);
-      const response = await generateText({
+      const rawTweetContent = await generateText({
         runtime: this.runtime,
         context,
         modelClass: ModelClass2.SMALL
       });
-      const rawTweetContent = cleanJsonResponse(response);
-      let tweetTextForPosting = null;
-      let mediaData = null;
       const parsedResponse = parseJSONObjectFromText(rawTweetContent);
-      if (parsedResponse == null ? void 0 : parsedResponse.text) {
-        tweetTextForPosting = parsedResponse.text;
-      } else {
-        tweetTextForPosting = rawTweetContent.trim();
-      }
-      if ((parsedResponse == null ? void 0 : parsedResponse.attachments) && (parsedResponse == null ? void 0 : parsedResponse.attachments.length) > 0) {
-        mediaData = await fetchMediaData(parsedResponse.attachments);
-      }
+      let tweetTextForPosting = (parsedResponse == null ? void 0 : parsedResponse.text) || null;
+      let mediaData = void 0;
       if (!tweetTextForPosting) {
-        const parsingText = extractAttributes(rawTweetContent, [
-          "text"
-        ]).text;
+        const parsingText = extractAttributes(rawTweetContent, ["text"]).text;
         if (parsingText) {
           tweetTextForPosting = truncateToCompleteSentence(
-            extractAttributes(rawTweetContent, ["text"]).text,
-            this.client.twitterConfig.MAX_TWEET_LENGTH
+            parsingText,
+            maxTweetLength
           );
         }
+        elizaLogger4.debug("Parsing text extracted:", parsingText);
       }
-      if (!tweetTextForPosting) {
-        tweetTextForPosting = rawTweetContent;
-      }
-      if (maxTweetLength) {
-        tweetTextForPosting = truncateToCompleteSentence(
-          tweetTextForPosting,
-          maxTweetLength
-        );
-      }
-      const removeQuotes = (str) => str.replace(/^['"](.*)['"]$/, "$1");
-      const fixNewLines = (str) => str.replaceAll(/\\n/g, "\n\n");
-      tweetTextForPosting = removeQuotes(
-        fixNewLines(tweetTextForPosting)
+      const callback = async (content) => {
+        if (!tweetTextForPosting) {
+          tweetTextForPosting = rawTweetContent;
+        }
+        if (maxTweetLength) {
+          tweetTextForPosting = truncateToCompleteSentence(
+            tweetTextForPosting,
+            maxTweetLength
+          );
+        }
+        if (content.attachments && content.attachments.length > 0) {
+          mediaData = await fetchMediaData(content.attachments);
+        }
+        const removeQuotes = (str) => str.replace(/^['"](.*)['"]$/, "$1");
+        const fixNewLines = (str) => str.replaceAll(/\\n/g, "\n\n");
+        tweetTextForPosting = removeQuotes(fixNewLines(tweetTextForPosting));
+        if (this.isDryRun) {
+          elizaLogger4.info(
+            `Dry run: would have posted tweet: ${tweetTextForPosting}`
+          );
+          return [];
+        }
+        try {
+          if (this.approvalRequired) {
+            elizaLogger4.log(
+              `Sending Tweet For Approval:
+ ${tweetTextForPosting}`
+            );
+            await this.sendForApproval(
+              tweetTextForPosting,
+              roomId,
+              rawTweetContent
+            );
+            elizaLogger4.log("Tweet sent for approval");
+          } else {
+            elizaLogger4.log(`Posting new tweet:
+ ${tweetTextForPosting}`);
+            this.postTweet(
+              this.runtime,
+              this.client,
+              tweetTextForPosting,
+              roomId,
+              rawTweetContent,
+              this.twitterUsername,
+              mediaData
+            );
+          }
+        } catch (error) {
+          console.log(error);
+          elizaLogger4.error("Error sending tweet:", error);
+        }
+        return [];
+      };
+      let tweet = parsedResponse;
+      await this.runtime.processActions(
+        {
+          userId: this.runtime.agentId,
+          roomId,
+          agentId: this.runtime.agentId,
+          content: { text: parsedResponse.text, source: "twitter" }
+        },
+        [
+          {
+            userId: this.runtime.agentId,
+            roomId,
+            agentId: this.runtime.agentId,
+            content: {
+              text: "Ok, generating.",
+              action: parsedResponse.action
+            }
+          }
+        ],
+        state,
+        async (content) => {
+          elizaLogger4.log("after generating");
+          tweet = content;
+          return [];
+        }
       );
-      if (this.isDryRun) {
-        elizaLogger4.info(
-          `Dry run: would have posted tweet: ${tweetTextForPosting}`
-        );
-        return;
-      }
-      try {
-        if (this.approvalRequired) {
-          elizaLogger4.log(
-            `Sending Tweet For Approval:
- ${tweetTextForPosting}`
-          );
-          await this.sendForApproval(
-            tweetTextForPosting,
-            roomId,
-            rawTweetContent
-          );
-          elizaLogger4.log("Tweet sent for approval");
-        } else {
-          elizaLogger4.log(
-            `Posting new tweet:
- ${tweetTextForPosting}`
-          );
-          this.postTweet(
-            this.runtime,
-            this.client,
-            tweetTextForPosting,
-            roomId,
-            rawTweetContent,
-            this.twitterUsername,
-            mediaData
-          );
-        }
-      } catch (error) {
-        elizaLogger4.error("Error sending tweet:", error);
-      }
+      await callback(tweet);
     } catch (error) {
+      console.log(error);
       elizaLogger4.error("Error generating new tweet:", error);
     }
   }
@@ -6101,39 +6156,65 @@ var TwitterPostClient = class {
     });
     elizaLogger4.log("generate tweet content response:\n" + response);
     const cleanedResponse = cleanJsonResponse(response);
+    let truncateContent = null;
     const jsonResponse = parseJSONObjectFromText(cleanedResponse);
     if (jsonResponse.text) {
-      const truncateContent2 = truncateToCompleteSentence(
+      truncateContent = truncateToCompleteSentence(
         jsonResponse.text,
         this.client.twitterConfig.MAX_TWEET_LENGTH
       );
-      return truncateContent2;
     }
     if (typeof jsonResponse === "object") {
       const possibleContent = jsonResponse.content || jsonResponse.message || jsonResponse.response;
       if (possibleContent) {
-        const truncateContent2 = truncateToCompleteSentence(
+        truncateContent = truncateToCompleteSentence(
           possibleContent,
           this.client.twitterConfig.MAX_TWEET_LENGTH
         );
-        return truncateContent2;
+      }
+    } else {
+      const parsingText = extractAttributes(cleanedResponse, ["text"]).text;
+      if (parsingText) {
+        truncateContent = truncateToCompleteSentence(
+          parsingText,
+          this.client.twitterConfig.MAX_TWEET_LENGTH
+        );
+      }
+      if (!truncateContent) {
+        truncateContent = truncateToCompleteSentence(
+          cleanedResponse,
+          this.client.twitterConfig.MAX_TWEET_LENGTH
+        );
       }
     }
-    let truncateContent = null;
-    const parsingText = extractAttributes(cleanedResponse, ["text"]).text;
-    if (parsingText) {
-      truncateContent = truncateToCompleteSentence(
-        parsingText,
-        this.client.twitterConfig.MAX_TWEET_LENGTH
-      );
-    }
-    if (!truncateContent) {
-      truncateContent = truncateToCompleteSentence(
-        cleanedResponse,
-        this.client.twitterConfig.MAX_TWEET_LENGTH
-      );
-    }
-    return truncateContent;
+    jsonResponse.text = truncateContent;
+    let tweet = jsonResponse;
+    await this.runtime.processActions(
+      {
+        userId: this.runtime.agentId,
+        roomId: tweetState.roomId,
+        agentId: this.runtime.agentId,
+        content: { text: jsonResponse.text, source: "twitter" }
+      },
+      [
+        {
+          userId: this.runtime.agentId,
+          roomId: tweetState.roomId,
+          agentId: this.runtime.agentId,
+          content: {
+            text: "Ok, generating.",
+            action: jsonResponse.action
+          }
+        }
+      ],
+      tweetState,
+      async (content) => {
+        elizaLogger4.log("after generating");
+        tweet = content;
+        return [];
+      }
+    );
+    return tweet;
   }
   /**
    * Processes tweet actions (likes, retweets, quotes, replies). If isDryRun is true,
@@ -6374,17 +6455,17 @@ ${imageDescriptions.map(
             }
             elizaLogger4.log(
               "Generated quote tweet content:",
-              quoteContent
+              quoteContent.text
             );
             if (this.isDryRun) {
               elizaLogger4.info(
-                `Dry run: A quote tweet for tweet ID ${tweet.id} would have been posted with the following content: "${quoteContent}".`
+                `Dry run: A quote tweet for tweet ID ${tweet.id} would have been posted with the following content: "${quoteContent.text}".`
               );
               executedActions.push("quote (dry run)");
             } else {
               const result = await this.client.requestQueue.add(
                 async () => await this.client.twitterClient.sendQuoteTweet(
-                  quoteContent,
+                  quoteContent.text,
                   tweet.id
                 )
               );
@@ -6400,7 +6481,7 @@ ${imageDescriptions.map(
 ${enrichedState}
 
 Generated Quote:
-${quoteContent}`
+${quoteContent.text}`
                 );
               } else {
                 elizaLogger4.error(
@@ -6526,33 +6607,39 @@ ${imageDescriptions.map((desc, i) => `Image ${i + 1}: ${desc}`).join("\n")}` : "
           quotedContent
         }
       );
-      const replyText = await this.generateTweetContent(enrichedState, {
+      const replyTweet = await this.generateTweetContent(enrichedState, {
         template: ((_b = this.runtime.character.templates) == null ? void 0 : _b.twitterMessageHandlerTemplate) || twitterMessageHandlerTemplate
       });
-      if (!replyText) {
+      if (!replyTweet) {
         elizaLogger4.error("Failed to generate valid reply content");
         return;
       }
       if (this.isDryRun) {
         elizaLogger4.info(
-          `Dry run: reply to tweet ${tweet.id} would have been: ${replyText}`
+          `Dry run: reply to tweet ${tweet.id} would have been: ${replyTweet.text}`
         );
         executedActions.push("reply (dry run)");
         return;
       }
-      elizaLogger4.debug("Final reply text to be sent:", replyText);
+      elizaLogger4.debug("Final reply text to be sent:", replyTweet.text);
       let result;
-      if (replyText.length > DEFAULT_MAX_TWEET_LENGTH) {
+      let mediaData = void 0;
+      if (replyTweet.attachments && replyTweet.attachments.length > 0) {
+        mediaData = await fetchMediaData(replyTweet.attachments);
+      }
+      if (replyTweet.text.length > DEFAULT_MAX_TWEET_LENGTH) {
         result = await this.handleNoteTweet(
           this.client,
-          replyText,
-          tweet.id
+          replyTweet.text,
+          tweet.id,
+          mediaData
         );
       } else {
         result = await this.sendStandardTweet(
           this.client,
-          replyText,
-          tweet.id
+          replyTweet.text,
+          tweet.id,
+          mediaData
         );
       }
       if (result) {
@@ -6564,7 +6651,7 @@ ${imageDescriptions.map((desc, i) => `Image ${i + 1}: ${desc}`).join("\n")}` : "
 ${enrichedState}
 
 Generated Reply:
-${replyText}`
+${replyTweet.text}`
         );
       } else {
         elizaLogger4.error("Tweet reply creation failed");
