@@ -55,6 +55,8 @@ Thread of Tweets You Are Replying To:
 {{actionNames}}
 {{actions}}
 
+Generate a meme to go along with the post, featuring character: {{agentName}}, decide between meme and no meme randoamlly.
+
 Here is the current post text again. Remember to include an action if the current post text includes a prompt that asks for one of the available actions mentioned above (does not need to be exact)
 {{currentPost}}
 Here is the descriptions of images in the Current post.
