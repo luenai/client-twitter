@@ -33,13 +33,11 @@ export async function getTokensForUser(userId: string, redisUrl: string) {
             console.log('Connected to Redis');
         }
 
-        const result = await client.get(`user_tokens_${userId}`);
-        return result;
+        return await client.get(`${userId}`);
     } catch (error) {
         console.error(`Error fetching tokens for user ${userId}:`, error);
 
-        // Attempt to reset the client for future requests
-        if (redisClient) {
+        if (redisClient && redisClient.isOpen) {
             try {
                 await redisClient.disconnect();
                 redisClient = null;
@@ -49,13 +47,5 @@ export async function getTokensForUser(userId: string, redisUrl: string) {
         }
 
         return null;
-    }
-}
-
-// Close Redis client when app shuts down
-export async function closeRedisConnection() {
-    if (redisClient && redisClient.isOpen) {
-        await redisClient.disconnect();
-        redisClient = null;
     }
 }
