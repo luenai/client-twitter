@@ -1,9 +1,7 @@
 import {createClient, RedisClientType} from 'redis';
 
-// Create a persistent Redis client
 let redisClient: RedisClientType | null = null;
 
-// Initialize the Redis client
 export async function initRedisClient(redisUrl) {
     if (redisClient && redisClient.isOpen) {
         return redisClient;
@@ -24,10 +22,8 @@ export async function initRedisClient(redisUrl) {
 
 export async function getTokensForUser(userId: string, redisUrl: string) {
     try {
-        // Get or initialize Redis client
         const client = await initRedisClient(redisUrl);
 
-        // Check if client is connected
         if (!client.isOpen) {
             await client.connect();
             console.log('Connected to Redis');
