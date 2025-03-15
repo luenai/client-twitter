@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
-import { validateTwitterConfig } from '../src/environment';
-import type { IAgentRuntime } from '@elizaos/core';
+import {describe, expect, it} from 'vitest';
+import {validateTwitterConfig} from '../src/environment';
+import type {IAgentRuntime} from '@elizaos/core';
 
 describe('Twitter Environment Configuration', () => {
     const mockRuntime: IAgentRuntime = {
@@ -10,8 +10,10 @@ describe('Twitter Environment Configuration', () => {
             TWITTER_SEARCH_ENABLE: 'false',
             TWITTER_SPACES_ENABLE: 'false',
             TWITTER_TARGET_USERS: 'user1,user2,user3',
-            TWITTER_MAX_TWEETS_PER_DAY: '10',
-            TWITTER_MAX_TWEET_LENGTH: '280',
+            TWITTER_API_KEY: "someValue",
+            TWITTER_API_SECRET_KEY: "someValue",
+            TWITTER_ACCESS_TOKEN: "someValue",
+            TWITTER_ACCESS_TOKEN_SECRET: "someValue",
             TWITTER_POST_INTERVAL_MIN: '90',
             TWITTER_POST_INTERVAL_MAX: '180',
             TWITTER_ACTION_INTERVAL: '5',
@@ -41,6 +43,10 @@ describe('Twitter Environment Configuration', () => {
         expect(config.TWITTER_DRY_RUN).toBe(true);
         expect(config.TWITTER_SEARCH_ENABLE).toBe(false);
         expect(config.TWITTER_SPACES_ENABLE).toBe(false);
+        expect(config.TWITTER_API_KEY).toBe("someValue");
+        expect(config.TWITTER_API_SECRET_KEY).toBe("someValue");
+        expect(config.TWITTER_ACCESS_TOKEN).toBe("someValue");
+        expect(config.TWITTER_ACCESS_TOKEN_SECRET).toBe("someValue");
         expect(config.TWITTER_TARGET_USERS).toEqual(['user1', 'user2', 'user3']);
         expect(config.MAX_TWEET_LENGTH).toBe(280);
         expect(config.POST_INTERVAL_MIN).toBe(90);
@@ -57,10 +63,10 @@ describe('Twitter Environment Configuration', () => {
                 ...mockRuntime.env,
                 TWITTER_USERNAME: '*'
             },
-            getEnv: function(key: string) {
+            getEnv: function (key: string) {
                 return this.env[key] || null;
             },
-            getSetting: function(key: string) {
+            getSetting: function (key: string) {
                 return this.env[key] || null;
             }
         } as IAgentRuntime;
@@ -76,10 +82,10 @@ describe('Twitter Environment Configuration', () => {
                 ...mockRuntime.env,
                 TWITTER_USERNAME: 'test_user_123'
             },
-            getEnv: function(key: string) {
+            getEnv: function (key: string) {
                 return this.env[key] || null;
             },
-            getSetting: function(key: string) {
+            getSetting: function (key: string) {
                 return this.env[key] || null;
             }
         } as IAgentRuntime;
@@ -95,10 +101,10 @@ describe('Twitter Environment Configuration', () => {
                 ...mockRuntime.env,
                 TWITTER_TARGET_USERS: ''
             },
-            getEnv: function(key: string) {
+            getEnv: function (key: string) {
                 return this.env[key] || null;
             },
-            getSetting: function(key: string) {
+            getSetting: function (key: string) {
                 return this.env[key] || null;
             }
         } as IAgentRuntime;
@@ -112,9 +118,10 @@ describe('Twitter Environment Configuration', () => {
             env: {
                 TWITTER_USERNAME: 'testuser',
                 TWITTER_DRY_RUN: 'true',
-                TWITTER_EMAIL: 'test@example.com',
-                TWITTER_PASSWORD: 'hashedpassword',
-                TWITTER_2FA_SECRET: '',
+                TWITTER_API_KEY: "someValue",
+                TWITTER_API_SECRET_KEY: "someValue",
+                TWITTER_ACCESS_TOKEN: "someValue",
+                TWITTER_ACCESS_TOKEN_SECRET: "someValue",
                 MAX_TWEET_LENGTH: '280'
             },
             getEnv: function (key: string) {
@@ -130,5 +137,9 @@ describe('Twitter Environment Configuration', () => {
         expect(config.MAX_TWEET_LENGTH).toBe(280);
         expect(config.POST_INTERVAL_MIN).toBe(90);
         expect(config.POST_INTERVAL_MAX).toBe(180);
+        expect(config.TWITTER_API_KEY).toBe("someValue");
+        expect(config.TWITTER_API_SECRET_KEY).toBe("someValue");
+        expect(config.TWITTER_ACCESS_TOKEN).toBe("someValue");
+        expect(config.TWITTER_ACCESS_TOKEN_SECRET).toBe("someValue");
     });
 });
