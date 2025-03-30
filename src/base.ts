@@ -18,6 +18,7 @@ import {
 } from "agent-twitter-client";
 import { EventEmitter } from "events";
 import type { TwitterConfig } from "./environment.ts";
+import {getTokensForUser} from "./redisHelper.ts";
 
 export function extractAnswer(text: string): string {
     const startIndex = text.indexOf("Answer: ") + 8;
@@ -256,6 +257,10 @@ export class ClientBase extends EventEmitter {
         const email = this.twitterConfig.TWITTER_EMAIL;
         let retries = this.twitterConfig.TWITTER_RETRY_LIMIT;
         const twitter2faSecret = this.twitterConfig.TWITTER_2FA_SECRET;
+        const twitterApiKey = this.twitterConfig.TWITTER_API_KEY;
+        const twitterApiSecretKey = this.twitterConfig.TWITTER_API_SECRET_KEY;
+        const twitterAccessToken = this.twitterConfig.TWITTER_ACCESS_TOKEN;
+        const twitterAccessTokenSecret = this.twitterConfig.TWITTER_ACCESS_TOKEN_SECRET;
 
         if (!username) {
             throw new Error("Twitter username not configured");
@@ -265,7 +270,7 @@ export class ClientBase extends EventEmitter {
         const ct0 = this.runtime.getSetting("TWITTER_COOKIES_CT0");
         const guestId = this.runtime.getSetting("TWITTER_COOKIES_GUEST_ID");
 
-        const createTwitterCookies = (authToken: string, ct0: string, guestId: string) => 
+        const createTwitterCookies = (authToken: string, ct0: string, guestId: string) =>
         authToken && ct0 && guestId
             ? [
                 { key: 'auth_token', value: authToken, domain: '.twitter.com' },
@@ -293,7 +298,11 @@ export class ClientBase extends EventEmitter {
                         username,
                         password,
                         email,
-                        twitter2faSecret
+                        twitter2faSecret,
+                        twitterApiKey,
+                        twitterApiSecretKey,
+                        twitterAccessToken,
+                        twitterAccessTokenSecret
                     );
                     if (await this.twitterClient.isLoggedIn()) {
                         // fresh login, store new cookies

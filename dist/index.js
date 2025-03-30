@@ -169,6 +169,10 @@ var ClientBase = class _ClientBase extends EventEmitter {
     const email = this.twitterConfig.TWITTER_EMAIL;
     let retries = this.twitterConfig.TWITTER_RETRY_LIMIT;
     const twitter2faSecret = this.twitterConfig.TWITTER_2FA_SECRET;
+    const twitterApiKey = this.twitterConfig.TWITTER_API_KEY;
+    const twitterApiSecretKey = this.twitterConfig.TWITTER_API_SECRET_KEY;
+    const twitterAccessToken = this.twitterConfig.TWITTER_ACCESS_TOKEN;
+    const twitterAccessTokenSecret = this.twitterConfig.TWITTER_ACCESS_TOKEN_SECRET;
     if (!username) {
       throw new Error("Twitter username not configured");
     }
@@ -196,7 +200,11 @@ var ClientBase = class _ClientBase extends EventEmitter {
             username,
             password,
             email,
-            twitter2faSecret
+            twitter2faSecret,
+            twitterApiKey,
+            twitterApiSecretKey,
+            twitterAccessToken,
+            twitterAccessTokenSecret
           );
           if (await this.twitterClient.isLoggedIn()) {
             elizaLogger.info("Successfully logged in.");
@@ -556,12 +564,13 @@ var ClientBase = class _ClientBase extends EventEmitter {
 };
 
 // src/environment.ts
-import {
-  parseBooleanFromText,
-  ActionTimelineType as ActionTimelineType2
-} from "@elizaos/core";
+import { ActionTimelineType as ActionTimelineType2, parseBooleanFromText } from "@elizaos/core";
 
+<<<<<<< HEAD
 // node_modules/.pnpm/zod@3.24.2/node_modules/zod/lib/index.mjs
+=======
+// ../../node_modules/.pnpm/zod@3.24.1/node_modules/zod/lib/index.mjs
+>>>>>>> lowhung/main
 var util;
 (function(util2) {
   util2.assertEqual = (val) => val;
@@ -4630,42 +4639,18 @@ var twitterUsernameSchema = z.string().min(1, "An X/Twitter Username must be at 
 var twitterEnvSchema = z.object({
   TWITTER_DRY_RUN: z.boolean(),
   TWITTER_USERNAME: z.string().min(1, "X/Twitter username is required"),
-  TWITTER_PASSWORD: z.string().min(1, "X/Twitter password is required"),
-  TWITTER_EMAIL: z.string().email("Valid X/Twitter email is required"),
+  TWITTER_PASSWORD: z.string().default("something"),
+  TWITTER_API_KEY: z.string().min(1, "X V2 Credentials required"),
+  TWITTER_API_SECRET_KEY: z.string().min(1, "X V2 Credentials required"),
+  TWITTER_ACCESS_TOKEN: z.string().min(1, "X V2 Credentials required"),
+  TWITTER_ACCESS_TOKEN_SECRET: z.string().min(1, "X V2 Credentials required"),
+  TWITTER_EMAIL: z.string().default("something"),
   MAX_TWEET_LENGTH: z.number().int().default(DEFAULT_MAX_TWEET_LENGTH),
   TWITTER_SEARCH_ENABLE: z.boolean().default(false),
   TWITTER_2FA_SECRET: z.string(),
   TWITTER_RETRY_LIMIT: z.number().int(),
   TWITTER_POLL_INTERVAL: z.number().int(),
   TWITTER_TARGET_USERS: z.array(twitterUsernameSchema).default([]),
-  // I guess it's possible to do the transformation with zod
-  // not sure it's preferable, maybe a readability issue
-  // since more people will know js/ts than zod
-  /*
-      z
-      .string()
-      .transform((val) => val.trim())
-      .pipe(
-          z.string()
-              .transform((val) =>
-                  val ? val.split(',').map((u) => u.trim()).filter(Boolean) : []
-              )
-              .pipe(
-                  z.array(
-                      z.string()
-                          .min(1)
-                          .max(15)
-                          .regex(
-                              /^[A-Za-z][A-Za-z0-9_]*[A-Za-z0-9]$|^[A-Za-z]$/,
-                              'Invalid Twitter username format'
-                          )
-                  )
-              )
-              .transform((users) => users.join(','))
-      )
-      .optional()
-      .default(''),
-  */
   ENABLE_TWITTER_POST_GENERATION: z.boolean(),
   POST_INTERVAL_MIN: z.number().int(),
   POST_INTERVAL_MAX: z.number().int(),
@@ -4695,6 +4680,10 @@ async function validateTwitterConfig(runtime) {
       ) ?? false,
       // parseBooleanFromText return null if "", map "" to false
       TWITTER_USERNAME: runtime.getSetting("TWITTER_USERNAME") || process.env.TWITTER_USERNAME,
+      TWITTER_API_KEY: runtime.getSetting("TWITTER_API_KEY") || process.env.TWITTER_API_KEY,
+      TWITTER_API_SECRET_KEY: runtime.getSetting("TWITTER_API_SECRET_KEY") || process.env.TWITTER_API_SECRET_KEY,
+      TWITTER_ACCESS_TOKEN: runtime.getSetting("TWITTER_ACCESS_TOKEN") || process.env.TWITTER_ACCESS_TOKEN,
+      TWITTER_ACCESS_TOKEN_SECRET: runtime.getSetting("TWITTER_ACCESS_TOKEN_SECRET") || process.env.TWITTER_ACCESS_TOKEN_SECRET,
       TWITTER_PASSWORD: runtime.getSetting("TWITTER_PASSWORD") || process.env.TWITTER_PASSWORD,
       TWITTER_EMAIL: runtime.getSetting("TWITTER_EMAIL") || process.env.TWITTER_EMAIL,
       // number as string?

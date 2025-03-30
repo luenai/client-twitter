@@ -1,2 +1,4 @@
 node_modules
 .turbo
+.idea
+*/.DS_STORE

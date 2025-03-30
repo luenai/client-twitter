@@ -31,6 +31,13 @@ TWITTER_PASSWORD=           # Your Twitter/X password
 TWITTER_EMAIL=              # Your Twitter/X email
 TWITTER_2FA_SECRET=         # Optional: 2FA secret for login
 
+# Alternatively, you can now use oauth flow, but these must be provided
+TWITTER_USERNAME=           # Your Twitter/X username
+TWITTER_API_KEY=            # Your Twitter API key
+TWITTER_API_SECRET=         # Your Twitter API secret
+TWITTER_ACCESS_TOKEN=       # Your Twitter access token
+TWITTER_ACCESS_TOKEN_SECRET=# Your Twitter access token secret
+
 # Twitter Client Configuration
 TWITTER_DRY_RUN=false      # Set to true for testing without posting
 MAX_TWEET_LENGTH=280       # Default tweet length limit
