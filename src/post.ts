@@ -33,7 +33,7 @@ import type { ActionResponse } from "@elizaos/core";
 import { MediaData } from "./types.ts";
 import { v4 as uuidv4 } from 'uuid';
 import type { Memory } from "@elizaos/core";
-import { createRaiinmakerService } from "@elizaos/plugin-raiinmaker";
+import { createRaiinmakerService } from "@elizaos-plugins/plugin-raiinmaker";
 
 const MAX_TIMELINES_TO_FETCH = 15;
 
