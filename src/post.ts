@@ -191,7 +191,6 @@ export class TwitterPostClient {
                 const discordToken = this.runtime.getSetting("TWITTER_APPROVAL_DISCORD_BOT_TOKEN");
                 const channelId = this.runtime.getSetting("TWITTER_APPROVAL_DISCORD_CHANNEL_ID");
                 
-                elizaLogger.debug(`🔍 Discord token available: ${!!discordToken}, Channel ID available: ${!!channelId}`);
                 
                 if (!discordToken || !channelId) {
                     elizaLogger.warn("Twitter approval is set to use Discord but credentials are missing");
@@ -219,26 +218,18 @@ export class TwitterPostClient {
     }
 
     private setupDiscordClient() {
-        elizaLogger.debug(`🔍 setupDiscordClient called with provider: "${this.approvalProvider}"`);
-        
-        if (this.approvalProvider !== "DISCORD") {
-            elizaLogger.warn(`setupDiscordClient called but provider is ${this.approvalProvider}`);
-            elizaLogger.debug(`🔍 Exiting setupDiscordClient early due to provider mismatch`);
-            // Set to null to explicitly prevent initialization attempts
-            this.discordClientForApproval = null;
-            return; // Early exit
-        }
-        
-        // Additional safety check - if token is missing or invalid, don't attempt to initialize
-        const token = this.runtime.getSetting("TWITTER_APPROVAL_DISCORD_BOT_TOKEN");
-        if (!token || token === "dummy_token_disabled" || token.trim() === '') {
-            elizaLogger.warn("Discord token is missing or invalid, skipping initialization");
-            this.discordClientForApproval = null;
-            return;
-        }
-        
         try {
-            elizaLogger.debug(`🔍 Creating new Discord client`);
+            // Check if required environment variables are set
+            const token = this.runtime.getSetting("TWITTER_APPROVAL_DISCORD_BOT_TOKEN");
+            this.discordApprovalChannelId = this.runtime.getSetting("TWITTER_APPROVAL_DISCORD_CHANNEL_ID");
+            
+            if (!token || !this.discordApprovalChannelId) {
+                elizaLogger.error("Missing required Discord environment variables for Twitter approval");
+                this.discordClientForApproval = null;
+                return;
+            }
+            
+            // Create Discord client
             this.discordClientForApproval = new Client({
                 intents: [
                     GatewayIntentBits.Guilds,
@@ -249,7 +240,6 @@ export class TwitterPostClient {
                 partials: [Partials.Channel, Partials.Message, Partials.Reaction],
             });
             
-            elizaLogger.debug(`🔍 Setting up Discord client ready handler`);
             this.discordClientForApproval.once(
                 Events.ClientReady,
                 (readyClient) => {
@@ -270,43 +260,14 @@ export class TwitterPostClient {
                 }
             );
             
-            elizaLogger.debug(`🔍 Attempting to login to Discord with token (first 8 chars): ${token?.substring(0, 8)}...`);
-            
             // Login to Discord with error handling
             this.discordClientForApproval.login(token).catch(error => {
                 elizaLogger.error("Error logging in to Discord:", error);
                 this.discordClientForApproval = null;
             });
-            
-            elizaLogger.debug(`🔍 Discord login attempt initiated`);
         } catch (error) {
             elizaLogger.error("Exception setting up Discord client:", error);
             this.discordClientForApproval = null;
-        }
-    }
-
-    /**
-     * Gets or creates the Raiinmaker service instance
-     */
-    private getRaiinmakerService() {
-        try {
-            // Don't directly reference plugin-raiinmaker
-            // Instead, check if the action exists in runtime
-            const raiinmakerEnabled = this.runtime.actions.some(
-                action => action.name === "VERIFY_GENERATION_CONTENT"
-            );
-            
-            if (!raiinmakerEnabled) {
-                elizaLogger.debug(`🔍 Raiinmaker plugin not available`);
-                return null;
-            }
-            
-            // We don't need to create a service directly
-            // Just return a non-null value to indicate availability
-            return {}; // Simple object instead of creating service
-        } catch (error) {
-            elizaLogger.error("Error getting Raiinmaker service:", error);
-            return null;
         }
     }
 
@@ -326,7 +287,6 @@ export class TwitterPostClient {
         try {
             // First, explicitly check the provider and ensure Discord client is null for safety
             if (this.approvalProvider === "RAIINMAKER") {
-                elizaLogger.debug(`🔍 Provider is RAIINMAKER, ensuring Discord client is null`);
                 this.discordClientForApproval = null;
             }
             
@@ -364,9 +324,6 @@ export class TwitterPostClient {
                 roomId: roomId.toString() // Pass the roomId to the action
             };
             
-            // Get more diagnostic information
-            elizaLogger.info("Verification options:", JSON.stringify(verificationOptions, null, 2));
-            
             try {
                 // Create a memory object for the action
                 let verificationResult: any = null;
@@ -402,9 +359,6 @@ export class TwitterPostClient {
                     }
                 );
                 
-                // Log the complete verification result for debugging
-                elizaLogger.info("Verification result:", JSON.stringify(verificationResult, null, 2));
-                
                 // Extract taskId from verificationResult.text if it's not at the top level
                 let taskId: string | null = null;
                 
@@ -416,13 +370,11 @@ export class TwitterPostClient {
                     const taskIdMatch = verificationResult.text.match(/Task ID: ([a-f0-9-]{36})/i);
                     if (taskIdMatch && taskIdMatch[1]) {
                         taskId = taskIdMatch[1];
-                        elizaLogger.info(`Extracted task ID from text: ${taskId}`);
                     }
                 }
                 
                 if (!taskId) {
                     elizaLogger.error("Failed to create verification task: Invalid response from Raiinmaker plugin");
-                    elizaLogger.debug("Verification result:", verificationResult);
                     
                     // Fallback: If verification fails but we have configured the system to post directly,
                     // skip verification and post immediately
@@ -445,7 +397,7 @@ export class TwitterPostClient {
                     return null;
                 }
                 
-                elizaLogger.success(`Successfully created verification task with ID: ${taskId}`);
+                elizaLogger.log(`Successfully created verification task with ID: ${taskId}`);
                 
                 // Store the pending tweet with the taskId
                 const pendingTweetsKey = `twitter/${this.client.profile.username}/pendingTweets`;
@@ -526,16 +478,13 @@ export class TwitterPostClient {
      */
     private async checkRaiinmakerVerificationStatus(taskId: string): Promise<PendingTweetApprovalStatus> {
         try {
-            // Guard to prevent Raiinmaker checks when not using Raiinmaker provider
             if (this.approvalProvider !== "RAIINMAKER") {
-                elizaLogger.warn(`checkRaiinmakerVerificationStatus called but provider is ${this.approvalProvider}, not RAIINMAKER`);
                 return "PENDING";
             }
             
-            elizaLogger.log(`CHECKING VERIFICATION STATUS for task ID: ${taskId}`);
+            elizaLogger.log(`Checking verification status for task ID: ${taskId}`);
             
             try {
-                // Use the processActions method directly from runtime with CHECK_VERIFICATION_STATUS action
                 let verificationStatus: any = null;
                 
                 const checkActionMemory: Memory = {
@@ -561,15 +510,11 @@ export class TwitterPostClient {
                     }
                 );
                 
-                // Log the complete response for debugging
-                elizaLogger.info(`VERIFICATION STATUS RAW RESULT: ${JSON.stringify(verificationStatus, null, 2)}`);
-                
                 if (!verificationStatus) {
-                    elizaLogger.info(`VERIFICATION FAILED: No status returned for task ${taskId}`);
                     return "PENDING";
                 }
                 
-                // More detailed parsing of the task status
+                // Parse the task status
                 const status = typeof verificationStatus.status === 'string' 
                     ? verificationStatus.status.toLowerCase() 
                     : null;
@@ -578,32 +523,25 @@ export class TwitterPostClient {
                     ? verificationStatus.answer.toLowerCase()
                     : null;
                 
-                elizaLogger.info(`FINAL VERIFICATION STATUS: status=${status}, answer=${answer}`);
-                
                 // Check for completed and approved
                 if (status === 'completed') {
                     if (answer === 'true' || answer === 'yes') {
-                        elizaLogger.info(`APPROVED: Task ${taskId} approved by Raiinmaker verification`);
                         return "APPROVED";
                     } else {
-                        elizaLogger.info(`REJECTED: Task ${taskId} rejected by Raiinmaker verification`);
                         return "REJECTED";
                     }
                 }
                 
-                elizaLogger.info(`PENDING: Task ${taskId} is still pending (status: ${status})`);
                 return "PENDING";
                 
             } catch (error: any) {
                 if (error?.status === 404) {
-                    // If task is not found, consider it as rejected to clean it up
-                    elizaLogger.warn(`Task ${taskId} not found in Raiinmaker system, marking as rejected`);
                     return "REJECTED";
                 }
-                throw error; // Re-throw other errors
+                throw error;
             }
         } catch (error) {
-            elizaLogger.error(`ERROR in verification status check for task ${taskId}:`, error);
+            elizaLogger.error(`Error checking verification status for task ${taskId}:`, error);
             return "PENDING";
         }
     }
@@ -1041,16 +979,12 @@ export class TwitterPostClient {
         roomId: UUID,
         rawTweetContent: string
     ): Promise<string | null> {
-        elizaLogger.debug(`🔍 sendForVerification using provider: "${this.approvalProvider}"`);
-        
         // Force provider to uppercase for consistent comparison
         const provider = this.approvalProvider.toUpperCase();
         
         // Add explicit safety measure - if we're using RAIINMAKER, nullify Discord
         if (provider === "RAIINMAKER") {
-            elizaLogger.debug(`🔍 Explicitly ensuring Discord client is null for RAIINMAKER provider`);
             this.discordClientForApproval = null;
-            
             return this.sendForRaiinmakerVerification(tweetTextForPosting, roomId, rawTweetContent);
         } else if (provider === "DISCORD") {
             // Only attempt Discord if it's explicitly selected
@@ -1104,8 +1038,6 @@ export class TwitterPostClient {
                     this.runtime.character.templates?.twitterPostTemplate ||
                     twitterPostTemplate,
             });
-
-            elizaLogger.debug("generate post prompt:\n" + context);
 
             const response = await generateText({
                 runtime: this.runtime,
@@ -1797,8 +1729,6 @@ export class TwitterPostClient {
                 return;
             }
 
-            elizaLogger.debug("Final reply text to be sent:", replyText);
-
             let result;
 
             if (replyText.length > DEFAULT_MAX_TWEET_LENGTH) {
@@ -1848,16 +1778,12 @@ export class TwitterPostClient {
     }
 
     private async checkVerificationStatus(taskId: string): Promise<PendingTweetApprovalStatus> {
-        elizaLogger.debug(`🔍 checkVerificationStatus called for task ${taskId} with provider: "${this.approvalProvider}"`);
-        
         if (this.approvalProvider === "DISCORD") {
-            elizaLogger.debug(`🔍 Using Discord for verification check`);
             return this.checkApprovalStatus(taskId);
         } else if (this.approvalProvider === "RAIINMAKER") {
-            elizaLogger.debug(`🔍 Using Raiinmaker for verification check`);
             return this.checkRaiinmakerVerificationStatus(taskId);
         } else {
-            elizaLogger.warn(`🔍 Unknown provider "${this.approvalProvider}", defaulting to PENDING status`);
+            elizaLogger.warn(`Unknown provider "${this.approvalProvider}", defaulting to PENDING status`);
             return "PENDING";
         }
     }
@@ -1868,38 +1794,26 @@ export class TwitterPostClient {
         try {
             // Guard to prevent Discord checks when not using Discord provider
             if (this.approvalProvider !== "DISCORD") {
-                elizaLogger.warn(`checkApprovalStatus called but provider is ${this.approvalProvider}, not Discord`);
                 return "PENDING";
             }
-            
-            elizaLogger.debug(`🔍 checkApprovalStatus called for message ID: ${discordMessageId}`);
-            elizaLogger.debug(`🔍 Discord client initialized: ${!!this.discordClientForApproval}`);
-            elizaLogger.debug(`🔍 Discord channel ID: ${this.discordApprovalChannelId}`);
             
             // Fetch message and its replies from Discord
             if (!this.discordClientForApproval) {
                 elizaLogger.error("Discord client not initialized for approval check");
-                elizaLogger.debug(`🔍 Returning PENDING status due to missing Discord client`);
                 return "PENDING";
             }
             
-            elizaLogger.debug(`🔍 Attempting to fetch Discord channel`);
             const channel = await this.discordClientForApproval.channels.fetch(
                 this.discordApprovalChannelId
             );
 
-            elizaLogger.log(`channel ${JSON.stringify(channel)}`);
-
             if (!(channel instanceof TextChannel)) {
                 elizaLogger.error("Invalid approval channel");
-                elizaLogger.debug(`🔍 Channel is not a TextChannel, returning PENDING`);
                 return "PENDING";
             }
 
             // Fetch the original message and its replies
-            elizaLogger.debug(`🔍 Attempting to fetch Discord message: ${discordMessageId}`);
             const message = await channel.messages.fetch(discordMessageId);
-            elizaLogger.debug(`🔍 Successfully fetched message`);
 
             // Look for thumbs up reaction ('👍')
             const thumbsUpReaction = message.reactions.cache.find(
@@ -1911,35 +1825,28 @@ export class TwitterPostClient {
                 (reaction) => reaction.emoji.name === "❌"
             );
 
-            elizaLogger.debug(`🔍 Found thumbs up reaction: ${!!thumbsUpReaction}, reject reaction: ${!!rejectReaction}`);
-
             // Check if the reaction exists and has reactions
             if (rejectReaction) {
-                const count = rejectReaction.count;
-                elizaLogger.debug(`🔍 Reject reaction count: ${count}`);
-                if (count > 0) {
-                    elizaLogger.debug(`🔍 Returning REJECTED status based on reactions`);
+                const reactionCount = rejectReaction.count;
+                if (reactionCount > 1) { // More than just the bot's reaction
+                    elizaLogger.log(`Tweet rejected via Discord reaction`);
                     return "REJECTED";
                 }
             }
 
-            // Check if the reaction exists and has reactions
+            // Check thumbs up for approval
             if (thumbsUpReaction) {
-                // You might want to check for specific users who can approve
-                // For now, we'll return true if anyone used thumbs up
-                const count = thumbsUpReaction.count;
-                elizaLogger.debug(`🔍 Approval reaction count: ${count}`);
-                if (count > 0) {
-                    elizaLogger.debug(`🔍 Returning APPROVED status based on reactions`);
+                const reactionCount = thumbsUpReaction.count;
+                if (reactionCount > 1) { // More than just the bot's reaction
+                    elizaLogger.log(`Tweet approved via Discord reaction`);
                     return "APPROVED";
                 }
             }
 
-            elizaLogger.debug(`🔍 No decisive reactions found, returning PENDING`);
+            // If we reach here, no valid approval or rejection found
             return "PENDING";
         } catch (error) {
-            elizaLogger.error("Error checking approval status:", error);
-            elizaLogger.debug(`🔍 Returning PENDING due to error during approval check`);
+            elizaLogger.error(`Error checking approval status: ${error}`);
             return "PENDING";
         }
     }
@@ -2080,34 +1987,24 @@ export class TwitterPostClient {
     }
     
     private async startVerificationPolling() {
-        elizaLogger.debug(`🔍 startVerificationPolling called with approval provider: "${this.approvalProvider}"`);
-        
-        // Ensure Discord is null for RAIINMAKER provider
-        if (this.approvalProvider.toUpperCase() === "RAIINMAKER") {
-            elizaLogger.debug(`🔍 Explicitly ensuring Discord client is null for RAIINMAKER provider before polling starts`);
-            this.discordClientForApproval = null;
-        }
-        
-        // Run an initial check immediately
-        elizaLogger.debug(`🔍 Running initial pending tweet check`);
-        await this.handlePendingTweet();
-        
-        // Set up the regular interval check
-        elizaLogger.debug(`🔍 Setting up interval for pending tweet checks every 5 minutes`);
-        setInterval(async () => {
-            try {
-                // Extra safeguard to ensure Discord is null for RAIINMAKER on each check
-                if (this.approvalProvider.toUpperCase() === "RAIINMAKER") {
-                    this.discordClientForApproval = null;
+        try {
+            // Set up the regular interval check
+            setInterval(async () => {
+                try {
+                    // Extra safeguard to ensure Discord is null for RAIINMAKER on each check
+                    if (this.approvalProvider.toUpperCase() === "RAIINMAKER") {
+                        this.discordClientForApproval = null;
+                    }
+                    
+                    await this.handlePendingTweet();
+                } catch (error) {
+                    elizaLogger.error("Error in tweet verification check loop:", error);
                 }
-                
-                elizaLogger.debug(`🔍 Running scheduled pending tweet check`);
-                await this.handlePendingTweet();
-            } catch (error) {
-                elizaLogger.error("Error in tweet verification check loop:", error);
-            }
-        }, 5 * 60 * 1000); // Check every 5 minutes
-        
-        elizaLogger.log(`Started ${this.approvalProvider} verification check loop`);
+            }, 5 * 60 * 1000); // Check every 5 minutes
+            
+            elizaLogger.log(`Started ${this.approvalProvider} verification check loop`);
+        } catch (error) {
+            elizaLogger.error("Error starting verification polling:", error);
+        }
     }
 }
