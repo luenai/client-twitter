@@ -561,7 +561,7 @@ import {
   ActionTimelineType as ActionTimelineType2
 } from "@elizaos/core";
 
-// ../../node_modules/.pnpm/zod@3.24.2/node_modules/zod/lib/index.mjs
+// ../../node_modules/.pnpm/zod@3.24.3/node_modules/zod/lib/index.mjs
 var util;
 (function(util2) {
   util2.assertEqual = (val) => val;
@@ -6030,7 +6030,20 @@ var TwitterPostClient = class {
         },
         {
           twitterUserName: this.client.profile.username,
-          maxTweetLength
+          maxTweetLength,
+          recentMessagesData: [
+            {
+              id: stringToUuid4("stub-room-" + roomId),
+              agentId: this.runtime.agentId,
+              userId: this.runtime.agentId,
+              roomId,
+              content: {
+                text: "Initiating first tweet generation.",
+                source: "system-init"
+              },
+              createdAt: Date.now()
+            }
+          ]
         }
       );
       const context = composeContext2({

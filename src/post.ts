@@ -542,7 +542,20 @@ export class TwitterPostClient {
             {
               twitterUserName: this.client.profile.username,
               maxTweetLength,
-            }
+              recentMessagesData: [
+                {
+                    id: stringToUuid("stub-room-" + roomId),
+                    agentId: this.runtime.agentId,
+                    userId: this.runtime.agentId,
+                    roomId: roomId,
+                    content: {
+                        text: "Initiating first tweet generation.",
+                        source: "system-init"
+                    },
+                    createdAt: Date.now(),
+                }
+            ]
+            },
           );
       
           const context = composeContext({
